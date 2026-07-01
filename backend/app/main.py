@@ -124,6 +124,9 @@ ensure_dir(WORK_ROOT)
 @app.on_event("startup")
 async def startup():
     await init_db()
+    # Start background cleanup for finished ACTIVE_SCANS entries
+    asyncio.create_task(_cleanup_active_scans_loop())
+
 
 
 @app.get("/health")
@@ -231,8 +234,23 @@ def _extract_dependencies(repo_dir: Path) -> List[tuple[str, str]]:
     return deps
 
 
-ACTIVE_SCANS = {}
+ACTIVE_SCANS: dict[str, dict] = {}
 ORG_CANCEL_EVENTS = {}
+
+# How long to keep completed/failed scan progress in memory for SSE clients.
+# After this TTL, entries are removed to prevent unbounded growth.
+_ACTIVE_SCANS_RETENTION_SECONDS_RAW = os.environ.get("ACTIVE_SCANS_RETENTION_SECONDS")
+try:
+    ACTIVE_SCANS_RETENTION_SECONDS = (
+        int(_ACTIVE_SCANS_RETENTION_SECONDS_RAW)
+        if _ACTIVE_SCANS_RETENTION_SECONDS_RAW
+        else 600
+    )
+except ValueError:
+    ACTIVE_SCANS_RETENTION_SECONDS = 600
+
+ACTIVE_SCANS_RETENTION_SECONDS = max(1, ACTIVE_SCANS_RETENTION_SECONDS)
+
 
 
 def _scan_repo_dir(
@@ -281,6 +299,37 @@ def _scan_repo_dir(
         progress_cb("secrets", "completed")
 
     entropy = run_entropy(repo_dir)
+
+
+async def _cleanup_active_scans_loop() -> None:
+    """Periodically remove finished scan entries from ACTIVE_SCANS.
+
+    This prevents unbounded memory growth in long-running deployments.
+    """
+
+    while True:
+        try:
+            cutoff = datetime.now(timezone.utc).timestamp() - ACTIVE_SCANS_RETENTION_SECONDS
+            # Copy keys to avoid mutating while iterating.
+            for job_id in list(ACTIVE_SCANS.keys()):
+                state = ACTIVE_SCANS.get(job_id)
+                if not state:
+                    continue
+                status = state.get("status")
+                if status not in {"completed", "failed", "aborted"}:
+                    continue
+
+                finished_at = state.get("finished_at")
+                if finished_at is None:
+                    # If finished_at is missing, keep entry for safety.
+                    continue
+
+                if finished_at <= cutoff:
+                    ACTIVE_SCANS.pop(job_id, None)
+        except Exception:
+            logger.exception("ACTIVE_SCANS cleanup loop error")
+        await asyncio.sleep(30)
+
 
     findings: List[Finding] = []
     findings.extend(semgrep)
@@ -574,10 +623,14 @@ async def _run_single_scan_task(
         if job_id in ACTIVE_SCANS:
             ACTIVE_SCANS[job_id]["status"] = "completed"
             ACTIVE_SCANS[job_id]["findings_count"] = finding_count
+            ACTIVE_SCANS[job_id]["finished_at"] = datetime.now(timezone.utc).timestamp()
+
     except Exception:
         logger.exception("Failed scan task for %s", job_id)
         if job_id in ACTIVE_SCANS:
             ACTIVE_SCANS[job_id]["status"] = "failed"
+            ACTIVE_SCANS[job_id]["finished_at"] = datetime.now(timezone.utc).timestamp()
+
         try:
             db = await get_db()
             try:
