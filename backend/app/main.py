@@ -33,7 +33,7 @@ from pydantic import BaseModel, Field
 
 from app.ml.deduplicator import SENTENCE_TRANSFORMERS_AVAILABLE, deduplicate
 from app.ml.fp_predictor import predictor
-from app.ml.ranker import load_ranker, scoring_function
+from app.ml.ranker import load_ranker
 
 from .db import (
     create_findings,
@@ -298,7 +298,16 @@ def _scan_repo_dir(
     if progress_cb:
         progress_cb("secrets", "completed")
 
+    findings = []
+    findings.extend(semgrep)
+    findings.extend(osv)
     entropy = run_entropy(repo_dir)
+
+    findings.extend(entropy)
+
+    return semgrep, osv, gitleaks, entropy, findings
+
+
 
 
 async def _cleanup_active_scans_loop() -> None:
@@ -306,7 +315,6 @@ async def _cleanup_active_scans_loop() -> None:
 
     This prevents unbounded memory growth in long-running deployments.
     """
-
     while True:
         try:
             cutoff = datetime.now(timezone.utc).timestamp() - ACTIVE_SCANS_RETENTION_SECONDS
@@ -331,23 +339,7 @@ async def _cleanup_active_scans_loop() -> None:
         await asyncio.sleep(30)
 
 
-    findings: List[Finding] = []
-    findings.extend(semgrep)
-    findings.extend(osv)
-    findings.extend(gitleaks)
-    findings.extend(entropy)
 
-    findings = scoring_function(findings, RANKER)
-
-    if RANKER:
-        findings.sort(
-            key=lambda f: getattr(f, "ml_score", 0.0),
-            reverse=True,
-        )
-    else:
-        findings = _prioritize_findings(findings)
-
-    return semgrep, osv, gitleaks, entropy, findings
 
 
 def finding_key(f: Finding):
