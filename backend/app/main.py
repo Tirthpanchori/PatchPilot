@@ -128,7 +128,6 @@ async def startup():
     asyncio.create_task(_cleanup_active_scans_loop())
 
 
-
 @app.get("/health")
 def health():
     scanners = {
@@ -252,7 +251,6 @@ except ValueError:
 ACTIVE_SCANS_RETENTION_SECONDS = max(1, ACTIVE_SCANS_RETENTION_SECONDS)
 
 
-
 def _scan_repo_dir(
     repo_dir: Path,
     progress_cb=None,
@@ -308,8 +306,6 @@ def _scan_repo_dir(
     return semgrep, osv, gitleaks, entropy, findings
 
 
-
-
 async def _cleanup_active_scans_loop() -> None:
     """Periodically remove finished scan entries from ACTIVE_SCANS.
 
@@ -317,7 +313,9 @@ async def _cleanup_active_scans_loop() -> None:
     """
     while True:
         try:
-            cutoff = datetime.now(timezone.utc).timestamp() - ACTIVE_SCANS_RETENTION_SECONDS
+            cutoff = (
+                datetime.now(timezone.utc).timestamp() - ACTIVE_SCANS_RETENTION_SECONDS
+            )
             # Copy keys to avoid mutating while iterating.
             for job_id in list(ACTIVE_SCANS.keys()):
                 state = ACTIVE_SCANS.get(job_id)
@@ -337,9 +335,6 @@ async def _cleanup_active_scans_loop() -> None:
         except Exception:
             logger.exception("ACTIVE_SCANS cleanup loop error")
         await asyncio.sleep(30)
-
-
-
 
 
 def finding_key(f: Finding):
