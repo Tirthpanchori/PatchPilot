@@ -31,10 +31,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from .ml.deduplicator import SENTENCE_TRANSFORMERS_AVAILABLE, deduplicate
-from .ml.fp_predictor import predictor
-from .ml.ranker import load_ranker, scoring_function
-
 from .db import (
     create_findings,
     create_job,
@@ -52,6 +48,9 @@ from .db import (
     update_job_status,
     upsert_contributor_stat,
 )
+from .ml.deduplicator import SENTENCE_TRANSFORMERS_AVAILABLE, deduplicate
+from .ml.fp_predictor import predictor
+from .ml.ranker import load_ranker, scoring_function
 from .models import (
     Finding,
     FindingStatusUpdate,
