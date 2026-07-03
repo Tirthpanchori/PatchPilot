@@ -34,7 +34,7 @@ from pydantic import BaseModel, Field
 from app.ml.deduplicator import SENTENCE_TRANSFORMERS_AVAILABLE, deduplicate
 from app.ml.fp_predictor import predictor
 from app.ml.ranker import load_ranker, scoring_function
-from starlette.concurrency import run_in_threadpool
+
 
 from .db import (
     create_findings,
