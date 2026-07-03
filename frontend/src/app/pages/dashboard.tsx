@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from "react";
-import { Upload, Link as LinkIcon, Clock, Trash2, Download, Loader2, CheckCircle, AlertTriangle, Building2, Layers } from "lucide-react";
+import { Upload, Link as LinkIcon, Clock, Trash2, Download, Loader2, CheckCircle, AlertTriangle, Building2, Layers, Zap, Wrench, ShieldCheck } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { scanRepoUrl, scanZip, downloadAuditReport, scanOrganization, getOrgJobStatus, abortOrganizationScan, API_BASE } from "../lib/api";
 import { saveLastScan } from "../lib/scan-store";
@@ -758,7 +758,7 @@ const handleAbortScan = async (mode: "pending" | "force") => {
           <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
               <div className="rounded-full bg-primary/10 p-2">
-                <Clock className="h-4 w-4 text-primary" />
+                <Zap className="h-4 w-4 text-primary" />
               </div>
               <div>
                 <div className="text-sm font-medium mb-1">Fast Scanning</div>
@@ -769,7 +769,7 @@ const handleAbortScan = async (mode: "pending" | "force") => {
             </div>
             <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
               <div className="rounded-full bg-primary/10 p-2">
-                <Clock className="h-4 w-4 text-primary" />
+                <Wrench className="h-4 w-4 text-primary" />
               </div>
               <div>
                 <div className="text-sm font-medium mb-1">Multiple Tools</div>
@@ -780,7 +780,7 @@ const handleAbortScan = async (mode: "pending" | "force") => {
             </div>
             <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
               <div className="rounded-full bg-primary/10 p-2">
-                <Clock className="h-4 w-4 text-primary" />
+                <ShieldCheck className="h-4 w-4 text-primary" />
               </div>
               <div>
                 <div className="text-sm font-medium mb-1">Evidence Pack</div>
