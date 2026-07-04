@@ -65,7 +65,7 @@ from .scanners.entropy import run_entropy
 from .scanners.gitleaks import run_gitleaks
 from .scanners.osv import run_osv_scanner
 from .scanners.semgrep import run_semgrep
-from .utils.fs import ensure_dir, safe_rmtree, unzip_to_dir
+from .utils.fs import ensure_dir, safe_rmtree, unzip_to_dir, safe_job_dir
 
 _MAX_UPLOAD_MB_RAW = os.environ.get("MAX_UPLOAD_MB")
 RANKER = load_ranker()
@@ -752,7 +752,11 @@ async def _record_fixes_to_db(job_id: str, fixes: List[Fix]):
 
 @app.post("/fix", response_model=FixResponse)
 def fix(req: FixRequest, background_tasks: BackgroundTasks):
-    job_dir = WORK_ROOT / req.job_id
+    try:
+        job_dir = safe_job_dir(WORK_ROOT, req.job_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     repo_dir = job_dir / "repo"
     if not repo_dir.exists():
         raise HTTPException(status_code=404, detail="Unknown job_id")
@@ -763,7 +767,6 @@ def fix(req: FixRequest, background_tasks: BackgroundTasks):
     background_tasks.add_task(_record_fixes_to_db, req.job_id, fixes)
 
     return FixResponse(job_id=req.job_id, fixes=fixes)
-
 
 async def get_baseline_findings(job_id: str):
     db = await get_db()
@@ -788,7 +791,11 @@ async def verify(
     job_id: str = Form(...),
     baseline_job_id: str | None = Form(None),
 ):
-    job_dir = WORK_ROOT / job_id
+    try:
+        job_dir = safe_job_dir(WORK_ROOT, job_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
     repo_dir = job_dir / "repo"
     if not repo_dir.exists():
         raise HTTPException(status_code=404, detail="Unknown job_id")
@@ -859,7 +866,11 @@ def evidence_pack(
     project_name: str = Form("project"),
     update_raw: bool = Form(False),
 ):
-    job_dir = WORK_ROOT / job_id
+    try:
+        job_dir = safe_job_dir(WORK_ROOT, job_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     repo_dir = job_dir / "repo"
     if not repo_dir.exists():
         raise HTTPException(status_code=404, detail="Unknown job_id")
@@ -1139,9 +1150,15 @@ async def get_verify(job_id: str):
 
 @app.delete("/jobs/{job_id}")
 def delete_job(job_id: str):
-    job_dir = WORK_ROOT / job_id
-    if job_dir.exists():
-        safe_rmtree(job_dir)
+    try:
+        job_dir = safe_job_dir(WORK_ROOT, job_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not job_dir.exists():
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    safe_rmtree(job_dir)
     return {"deleted": True}
 
 
