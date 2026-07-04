@@ -8,8 +8,10 @@ from pathlib import Path
 
 JOB_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
+
 def ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
+
 
 def safe_rmtree(p: Path) -> None:
     shutil.rmtree(p, ignore_errors=True)

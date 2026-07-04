@@ -851,6 +851,7 @@ def fix(req: FixRequest, background_tasks: BackgroundTasks):
 
     return FixResponse(job_id=req.job_id, fixes=fixes)
 
+
 async def get_baseline_findings(job_id: str):
     db = await get_db()
     try:
@@ -902,7 +903,7 @@ async def verify(
         job_dir = safe_job_dir(WORK_ROOT, job_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-        
+
     """
     Verify that applied fixes resolve previously detected security issues.
 
@@ -1242,6 +1243,7 @@ async def delete_job_endpoint(job_id: str):
         await db.close()
 
     return {"deleted": True}
+
 
 @app.get("/trends")
 async def get_trends_endpoint(limit: int = 6):
