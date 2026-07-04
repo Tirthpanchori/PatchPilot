@@ -394,7 +394,7 @@ export function Findings() {
             scan.
           </p>
           <div className="mt-4">
-            <Button onClick={() => navigate("/")}>Go to Dashboard</Button>
+            <Button onClick={() => navigate("/dashboard")}>Go to Dashboard</Button>
           </div>
         </div>
       </div>
@@ -473,7 +473,12 @@ export function Findings() {
                 {selectedFindings.size !== 1 ? "s" : ""} selected
               </span>
               <div className="flex gap-2">
-                <Link to="/fix">
+                <Link
+                  to="/fix"
+                  state={{
+                    findingIds: [...selectedFindings],
+                  }}
+                >
                   <Button size="sm">Propose Fixes</Button>
                 </Link>
                 <Button variant="outline" size="sm" disabled>
