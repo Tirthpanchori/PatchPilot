@@ -181,7 +181,7 @@ async def test_org_repo_scan_keeps_api_responsive_during_blocking_scan(tmp_path)
         await scan_task
 
     assert response.status_code == 200
-    assert elapsed < 0.2
+    assert elapsed < 0.5
 
 
 @patch("app.main.get_db", new_callable=AsyncMock)

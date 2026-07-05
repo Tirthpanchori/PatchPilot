@@ -348,7 +348,10 @@ MAX_REDIRECTS = 5
 
 
 async def download_to_path(
-    url: str, dest_path: Path, max_retries: int = 5, cancel_event: asyncio.Event = None
+    url: str,
+    dest_path: Path,
+    max_retries: int = 5,
+    cancel_event: threading.Event = None,
 ) -> None:
     """
     Download *url* to *dest_path*, following redirects only to hosts in
@@ -1170,7 +1173,7 @@ async def _run_repo_scan_task(
     ref: str,
     project_name: str,
     org_job_id: str,
-    cancel_event: asyncio.Event = None,
+    cancel_event: threading.Event = None,
 ):
     async with sem:
         try:
@@ -1306,7 +1309,7 @@ async def _run_repo_scan_task(
 
 
 async def _run_org_batch(org_job_id: str, repos: List[dict]):
-    cancel_event = asyncio.Event()
+    cancel_event = threading.Event()
     ORG_CANCEL_EVENTS[org_job_id] = cancel_event
 
     db = await get_db()
