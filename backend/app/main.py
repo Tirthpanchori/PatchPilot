@@ -9,6 +9,7 @@ import random
 import re
 import shutil
 import tempfile
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -238,7 +239,7 @@ def _scan_repo_dir(
     repo_dir: Path,
     progress_cb=None,
     job_dir: Path = None,
-    cancel_event: asyncio.Event = None,
+    cancel_event: threading.Event = None,
     raw_dir_name: str = "raw",
 ):
     if cancel_event and cancel_event.is_set():
@@ -1350,7 +1351,9 @@ async def _run_org_batch(org_job_id: str, repos: List[dict]):
             )
         )
 
-    cancel_task = asyncio.create_task(cancel_event.wait())
+    cancel_task = asyncio.create_task(
+             asyncio.to_thread(cancel_event.wait)
+    )
     wait_tasks = asyncio.create_task(asyncio.gather(*tasks, return_exceptions=True))
 
     try:
@@ -1376,6 +1379,7 @@ async def _run_org_batch(org_job_id: str, repos: List[dict]):
         else:
             cancel_task.cancel()
     finally:
+        cancel_task.cancel()
         ORG_CANCEL_EVENTS.pop(org_job_id, None)
 
     db = await get_db()
