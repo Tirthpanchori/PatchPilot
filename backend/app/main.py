@@ -9,6 +9,7 @@ import random
 import re
 import shutil
 import tempfile
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,10 +32,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.ml.deduplicator import SENTENCE_TRANSFORMERS_AVAILABLE, deduplicate
-from app.ml.fp_predictor import predictor
-from app.ml.ranker import load_ranker, scoring_function
-
 from .db import (
     create_findings,
     create_job,
@@ -52,6 +49,9 @@ from .db import (
     update_job_status,
     upsert_contributor_stat,
 )
+from .ml.deduplicator import SENTENCE_TRANSFORMERS_AVAILABLE, deduplicate
+from .ml.fp_predictor import predictor
+from .ml.ranker import load_ranker, scoring_function
 from .models import (
     Finding,
     FindingStatusUpdate,
@@ -239,7 +239,7 @@ def _scan_repo_dir(
     repo_dir: Path,
     progress_cb=None,
     job_dir: Path = None,
-    cancel_event: asyncio.Event = None,
+    cancel_event: threading.Event = None,
     raw_dir_name: str = "raw",
 ):
     if cancel_event and cancel_event.is_set():
@@ -348,7 +348,10 @@ MAX_REDIRECTS = 5
 
 
 async def download_to_path(
-    url: str, dest_path: Path, max_retries: int = 5, cancel_event: asyncio.Event = None
+    url: str,
+    dest_path: Path,
+    max_retries: int = 5,
+    cancel_event: threading.Event = None,
 ) -> None:
     """
     Download *url* to *dest_path*, following redirects only to hosts in
@@ -1343,7 +1346,7 @@ async def _run_repo_scan_task(
     ref: str,
     project_name: str,
     org_job_id: str,
-    cancel_event: asyncio.Event = None,
+    cancel_event: threading.Event = None,
 ):
     async with sem:
         try:
@@ -1479,7 +1482,7 @@ async def _run_repo_scan_task(
 
 
 async def _run_org_batch(org_job_id: str, repos: List[dict]):
-    cancel_event = asyncio.Event()
+    cancel_event = threading.Event()
     ORG_CANCEL_EVENTS[org_job_id] = cancel_event
 
     db = await get_db()
@@ -1524,7 +1527,7 @@ async def _run_org_batch(org_job_id: str, repos: List[dict]):
             )
         )
 
-    cancel_task = asyncio.create_task(cancel_event.wait())
+    cancel_task = asyncio.create_task(asyncio.to_thread(cancel_event.wait))
     wait_tasks = asyncio.create_task(asyncio.gather(*tasks, return_exceptions=True))
 
     try:
@@ -1550,6 +1553,7 @@ async def _run_org_batch(org_job_id: str, repos: List[dict]):
         else:
             cancel_task.cancel()
     finally:
+        cancel_task.cancel()
         ORG_CANCEL_EVENTS.pop(org_job_id, None)
 
     db = await get_db()
