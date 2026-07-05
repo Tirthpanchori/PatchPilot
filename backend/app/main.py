@@ -1351,9 +1351,7 @@ async def _run_org_batch(org_job_id: str, repos: List[dict]):
             )
         )
 
-    cancel_task = asyncio.create_task(
-             asyncio.to_thread(cancel_event.wait)
-    )
+    cancel_task = asyncio.create_task(asyncio.to_thread(cancel_event.wait))
     wait_tasks = asyncio.create_task(asyncio.gather(*tasks, return_exceptions=True))
 
     try:
