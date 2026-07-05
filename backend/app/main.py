@@ -504,7 +504,7 @@ async def _run_single_scan_task(
         finally:
             await db.close()
 
-        job_dir = WORK_ROOT / job_id
+        job_dir = safe_job_dir(WORK_ROOT, job_id)
         semgrep, osv, gitleaks, entropy, findings = await run_in_threadpool(
             functools.partial(
                 _scan_repo_dir, scan_root, update_progress, job_dir=job_dir
@@ -899,11 +899,6 @@ async def verify(
         ),
     ),
 ):
-    try:
-        job_dir = safe_job_dir(WORK_ROOT, job_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
     """
     Verify that applied fixes resolve previously detected security issues.
 
@@ -911,6 +906,11 @@ async def verify(
     determine whether fixes were successful and whether any new
     vulnerabilities were introduced.
     """
+    try:
+        job_dir = safe_job_dir(WORK_ROOT, job_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     repo_dir = job_dir / "repo"
     if not repo_dir.exists():
         raise HTTPException(status_code=404, detail="Unknown job_id")
@@ -918,6 +918,12 @@ async def verify(
     repo_dir = _maybe_use_single_top_folder(repo_dir)
 
     result = verify_repo(repo_dir)
+
+    if baseline_job_id is not None:
+        try:
+            safe_job_dir(WORK_ROOT, baseline_job_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     baseline_job_id = baseline_job_id or job_id
     baseline_findings = await get_baseline_findings(baseline_job_id)
@@ -1359,7 +1365,7 @@ async def _run_repo_scan_task(
             finally:
                 await db.close()
 
-            job_dir = WORK_ROOT / job_id
+            job_dir = safe_job_dir(WORK_ROOT, job_id)
             ensure_dir(job_dir)
             archive_path = job_dir / "repo.zip"
             repo_dir = job_dir / "repo"

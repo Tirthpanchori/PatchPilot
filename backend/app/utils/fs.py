@@ -25,7 +25,7 @@ def safe_job_dir(work_root: Path, job_id: str) -> Path:
     resolved = (work_root / job_id).resolve()
     work_root_resolved = work_root.resolve()
 
-    if not str(resolved).startswith(str(work_root_resolved)):
+    if not resolved.is_relative_to(work_root_resolved):
         raise ValueError(f"Path traversal detected for job_id: {job_id}")
 
     return resolved
