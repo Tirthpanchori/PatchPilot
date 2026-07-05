@@ -1011,11 +1011,6 @@ def evidence_pack(
         description="If true, refreshes the raw scan results before generating the evidence package.",
     ),
 ):
-    try:
-        job_dir = safe_job_dir(WORK_ROOT, job_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
     """
     Generate a downloadable evidence package for a completed scan.
 
@@ -1023,6 +1018,11 @@ def evidence_pack(
     supporting artifacts that can be used for auditing, compliance,
     or sharing scan results.
     """
+    try:
+        job_dir = safe_job_dir(WORK_ROOT, job_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     repo_dir = job_dir / "repo"
     if not repo_dir.exists():
         raise HTTPException(status_code=404, detail="Unknown job_id")
