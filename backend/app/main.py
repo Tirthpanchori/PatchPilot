@@ -33,7 +33,7 @@ from pydantic import BaseModel, Field
 
 from app.ml.deduplicator import SENTENCE_TRANSFORMERS_AVAILABLE, deduplicate
 from app.ml.fp_predictor import predictor
-from app.ml.ranker import load_ranker
+from app.ml.ranker import load_ranker, scoring_function
 
 from .db import (
     create_findings,
@@ -301,7 +301,18 @@ def _scan_repo_dir(
     findings.extend(osv)
     entropy = run_entropy(repo_dir)
 
+    findings.extend(gitleaks)
     findings.extend(entropy)
+
+    findings = scoring_function(findings, RANKER)
+
+    if RANKER:
+        findings.sort(
+            key=lambda f: getattr(f, "ml_score", 0.0),
+            reverse=True,
+        )
+    else:
+        findings = _prioritize_findings(findings)
 
     return semgrep, osv, gitleaks, entropy, findings
 
