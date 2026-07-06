@@ -9,6 +9,7 @@ import random
 import re
 import shutil
 import tempfile
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,10 +32,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.ml.deduplicator import SENTENCE_TRANSFORMERS_AVAILABLE, deduplicate
-from app.ml.fp_predictor import predictor
-from app.ml.ranker import load_ranker, scoring_function
-
 from .db import (
     create_findings,
     create_job,
@@ -52,6 +49,9 @@ from .db import (
     update_job_status,
     upsert_contributor_stat,
 )
+from .ml.deduplicator import SENTENCE_TRANSFORMERS_AVAILABLE, deduplicate
+from .ml.fp_predictor import predictor
+from .ml.ranker import load_ranker, scoring_function
 from .models import (
     Finding,
     FindingStatusUpdate,
@@ -73,7 +73,7 @@ from .scanners.entropy import run_entropy
 from .scanners.gitleaks import run_gitleaks
 from .scanners.osv import run_osv_scanner
 from .scanners.semgrep import run_semgrep
-from .utils.fs import ensure_dir, safe_rmtree, unzip_to_dir
+from .utils.fs import ensure_dir, safe_job_dir, safe_rmtree, unzip_to_dir
 
 _MAX_UPLOAD_MB_RAW = os.environ.get("MAX_UPLOAD_MB")
 RANKER = load_ranker()
@@ -239,7 +239,7 @@ def _scan_repo_dir(
     repo_dir: Path,
     progress_cb=None,
     job_dir: Path = None,
-    cancel_event: asyncio.Event = None,
+    cancel_event: threading.Event = None,
     raw_dir_name: str = "raw",
 ):
     if cancel_event and cancel_event.is_set():
@@ -348,7 +348,10 @@ MAX_REDIRECTS = 5
 
 
 async def download_to_path(
-    url: str, dest_path: Path, max_retries: int = 5, cancel_event: asyncio.Event = None
+    url: str,
+    dest_path: Path,
+    max_retries: int = 5,
+    cancel_event: threading.Event = None,
 ) -> None:
     """
     Download *url* to *dest_path*, following redirects only to hosts in
@@ -504,7 +507,7 @@ async def _run_single_scan_task(
         finally:
             await db.close()
 
-        job_dir = WORK_ROOT / job_id
+        job_dir = safe_job_dir(WORK_ROOT, job_id)
         semgrep, osv, gitleaks, entropy, findings = await run_in_threadpool(
             functools.partial(
                 _scan_repo_dir, scan_root, update_progress, job_dir=job_dir
@@ -835,7 +838,11 @@ def fix(req: FixRequest, background_tasks: BackgroundTasks):
     fixes for detected security issues. Generated fixes are returned
     immediately and stored asynchronously for later reporting.
     """
-    job_dir = WORK_ROOT / req.job_id
+    try:
+        job_dir = safe_job_dir(WORK_ROOT, req.job_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     repo_dir = job_dir / "repo"
     if not repo_dir.exists():
         raise HTTPException(status_code=404, detail="Unknown job_id")
@@ -902,7 +909,11 @@ async def verify(
     determine whether fixes were successful and whether any new
     vulnerabilities were introduced.
     """
-    job_dir = WORK_ROOT / job_id
+    try:
+        job_dir = safe_job_dir(WORK_ROOT, job_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     repo_dir = job_dir / "repo"
     if not repo_dir.exists():
         raise HTTPException(status_code=404, detail="Unknown job_id")
@@ -910,6 +921,12 @@ async def verify(
     repo_dir = _maybe_use_single_top_folder(repo_dir)
 
     result = verify_repo(repo_dir)
+
+    if baseline_job_id is not None:
+        try:
+            safe_job_dir(WORK_ROOT, baseline_job_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     baseline_job_id = baseline_job_id or job_id
     baseline_findings = await get_baseline_findings(baseline_job_id)
@@ -1004,7 +1021,11 @@ def evidence_pack(
     supporting artifacts that can be used for auditing, compliance,
     or sharing scan results.
     """
-    job_dir = WORK_ROOT / job_id
+    try:
+        job_dir = safe_job_dir(WORK_ROOT, job_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     repo_dir = job_dir / "repo"
     if not repo_dir.exists():
         raise HTTPException(status_code=404, detail="Unknown job_id")
@@ -1214,14 +1235,22 @@ async def get_verify(job_id: str):
 
 @app.delete("/jobs/{job_id}")
 async def delete_job_endpoint(job_id: str):
-    job_dir = WORK_ROOT / job_id
-    if job_dir.exists():
-        safe_rmtree(job_dir)
+    try:
+        job_dir = safe_job_dir(WORK_ROOT, job_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not job_dir.exists():
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    safe_rmtree(job_dir)
+
     db = await get_db()
     try:
         await delete_job(db, job_id)
     finally:
         await db.close()
+
     return {"deleted": True}
 
 
@@ -1317,7 +1346,7 @@ async def _run_repo_scan_task(
     ref: str,
     project_name: str,
     org_job_id: str,
-    cancel_event: asyncio.Event = None,
+    cancel_event: threading.Event = None,
 ):
     async with sem:
         try:
@@ -1339,7 +1368,7 @@ async def _run_repo_scan_task(
             finally:
                 await db.close()
 
-            job_dir = WORK_ROOT / job_id
+            job_dir = safe_job_dir(WORK_ROOT, job_id)
             ensure_dir(job_dir)
             archive_path = job_dir / "repo.zip"
             repo_dir = job_dir / "repo"
@@ -1453,7 +1482,7 @@ async def _run_repo_scan_task(
 
 
 async def _run_org_batch(org_job_id: str, repos: List[dict]):
-    cancel_event = asyncio.Event()
+    cancel_event = threading.Event()
     ORG_CANCEL_EVENTS[org_job_id] = cancel_event
 
     db = await get_db()
@@ -1498,7 +1527,7 @@ async def _run_org_batch(org_job_id: str, repos: List[dict]):
             )
         )
 
-    cancel_task = asyncio.create_task(cancel_event.wait())
+    cancel_task = asyncio.create_task(asyncio.to_thread(cancel_event.wait))
     wait_tasks = asyncio.create_task(asyncio.gather(*tasks, return_exceptions=True))
 
     try:
@@ -1524,6 +1553,7 @@ async def _run_org_batch(org_job_id: str, repos: List[dict]):
         else:
             cancel_task.cancel()
     finally:
+        cancel_task.cancel()
         ORG_CANCEL_EVENTS.pop(org_job_id, None)
 
     db = await get_db()
