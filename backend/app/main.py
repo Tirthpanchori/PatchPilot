@@ -57,7 +57,7 @@ from .scanners.gitleaks import run_gitleaks
 from .scanners.osv import run_osv_scanner
 from .scanners.semgrep import run_semgrep
 from .security import verify_api_key
-from .utils.fs import ensure_dir, safe_rmtree, unzip_to_dir
+from .utils.fs import ensure_dir, safe_job_dir, safe_rmtree, unzip_to_dir
 
 _MAX_UPLOAD_MB_RAW = os.environ.get("MAX_UPLOAD_MB")
 RANKER = load_ranker()
