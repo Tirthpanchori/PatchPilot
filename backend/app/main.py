@@ -14,6 +14,7 @@ import aiosqlite
 import httpx
 from fastapi import (
     BackgroundTasks,
+    Depends,
     FastAPI,
     File,
     Form,
@@ -55,6 +56,7 @@ from .scanners.entropy import run_entropy
 from .scanners.gitleaks import run_gitleaks
 from .scanners.osv import run_osv_scanner
 from .scanners.semgrep import run_semgrep
+from .security import verify_api_key
 from .utils.fs import ensure_dir, safe_rmtree, unzip_to_dir
 
 _MAX_UPLOAD_MB_RAW = os.environ.get("MAX_UPLOAD_MB")
@@ -252,7 +254,11 @@ def _maybe_use_single_top_folder(repo_dir: Path) -> Path:
     return repo_dir
 
 
-@app.post("/scan", response_model=ScanResponse)
+@app.post(
+    "/scan",
+    response_model=ScanResponse,
+    dependencies=[Depends(verify_api_key)],
+)
 async def scan(
     request: Request,
     project: UploadFile = File(...),
@@ -353,7 +359,11 @@ async def scan(
     )
 
 
-@app.post("/scan-url", response_model=ScanResponse)
+@app.post(
+    "/scan-url",
+    response_model=ScanResponse,
+    dependencies=[Depends(verify_api_key)],
+)
 async def scan_url(
     repo_url: str = Form(...),
     ref: str = Form("main"),
@@ -449,7 +459,11 @@ async def scan_url(
     )
 
 
-@app.post("/fix", response_model=FixResponse)
+@app.post(
+    "/fix",
+    response_model=FixResponse,
+    dependencies=[Depends(verify_api_key)],
+)
 def fix(req: FixRequest):
     job_dir = WORK_ROOT / req.job_id
     repo_dir = job_dir / "repo"
@@ -487,7 +501,11 @@ async def get_baseline_findings(job_id: str):
         await db.close()
 
 
-@app.post("/verify", response_model=VerifyResponse)
+@app.post(
+    "/verify",
+    response_model=VerifyResponse,
+    dependencies=[Depends(verify_api_key)],
+)
 async def verify(job_id: str = Form(...)):
     job_dir = WORK_ROOT / job_id
     repo_dir = job_dir / "repo"
@@ -538,7 +556,10 @@ async def verify(job_id: str = Form(...)):
     return result
 
 
-@app.post("/evidence-pack")
+@app.post(
+    "/evidence-pack",
+    dependencies=[Depends(verify_api_key)],
+)
 def evidence_pack(job_id: str = Form(...), project_name: str = Form("project")):
     job_dir = WORK_ROOT / job_id
     repo_dir = job_dir / "repo"
@@ -558,7 +579,11 @@ def evidence_pack(job_id: str = Form(...), project_name: str = Form("project")):
     )
 
 
-@app.get("/api/scans/{job_id}/report/pdf", tags=["Reports"])
+@app.get(
+    "/api/scans/{job_id}/report/pdf",
+    tags=["Reports"],
+    dependencies=[Depends(verify_api_key)],
+)
 async def download_audit_pdf(job_id: str):
     db = await get_db()
     try:
@@ -627,7 +652,10 @@ async def download_audit_pdf(job_id: str):
     )
 
 
-@app.get("/jobs/{job_id}/findings")
+@app.get(
+    "/jobs/{job_id}/findings",
+    dependencies=[Depends(verify_api_key)],
+)
 async def get_findings(job_id: str):
     db = await get_db()
     try:
@@ -658,7 +686,10 @@ async def get_findings(job_id: str):
     return {"job_id": job_id, "finding_count": len(findings), "findings": findings}
 
 
-@app.get("/jobs/{job_id}/verify")
+@app.get(
+    "/jobs/{job_id}/verify",
+    dependencies=[Depends(verify_api_key)],
+)
 async def get_verify(job_id: str):
     db = await get_db()
     try:
@@ -693,7 +724,10 @@ async def get_verify(job_id: str):
     return dict(zip(columns, row))
 
 
-@app.delete("/jobs/{job_id}")
+@app.delete(
+    "/jobs/{job_id}",
+    dependencies=[Depends(verify_api_key)],
+)
 def delete_job(job_id: str):
     job_dir = WORK_ROOT / job_id
     if job_dir.exists():
@@ -701,21 +735,30 @@ def delete_job(job_id: str):
     return {"deleted": True}
 
 
-@app.get("/trends")
+@app.get(
+    "/trends",
+    dependencies=[Depends(verify_api_key)],
+)
 async def get_trends_endpoint(limit: int = 6):
     """Fetches historical trend data for the frontend dashboard."""
     data = await get_trend_data(limit)
     return data
 
 
-@app.get("/cwe-distribution")
+@app.get(
+    "/cwe-distribution",
+    dependencies=[Depends(verify_api_key)],
+)
 async def cwe_distribution_endpoint():
     """Fetches the vulnerability distribution for the frontend donut chart."""
     data = await get_cwe_distribution()
     return data
 
 
-@app.get("/dependency-diff")
+@app.get(
+    "/dependency-diff",
+    dependencies=[Depends(verify_api_key)],
+)
 async def dependency_diff_endpoint():
     data = await get_dependency_diff()
     return data
@@ -728,13 +771,19 @@ class LeaderboardUpdateRequest(BaseModel):
     is_pr_merged: bool = False
 
 
-@app.get("/leaderboard")
+@app.get(
+    "/leaderboard",
+    dependencies=[Depends(verify_api_key)],
+)
 async def leaderboard_endpoint():
     data = await get_leaderboard_stats()
     return data
 
 
-@app.post("/leaderboard/update")
+@app.post(
+    "/leaderboard/update",
+    dependencies=[Depends(verify_api_key)],
+)
 async def update_leaderboard_endpoint(req: LeaderboardUpdateRequest):
     pattern = r"(?i)(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\s+#(\d+)"
     matches = re.findall(pattern, req.pr_description)
@@ -911,7 +960,10 @@ async def _run_org_batch(org_job_id: str, repos: List[dict]):
         await db.close()
 
 
-@app.post("/api/scans/org")
+@app.post(
+    "/api/scans/org",
+    dependencies=[Depends(verify_api_key)],
+)
 async def scan_org(req: OrgScanRequest, background_tasks: BackgroundTasks):
     m = re.match(
         r"^https?://github\.com/([^/]+)/?$", req.org_url.strip(), re.IGNORECASE
@@ -943,7 +995,11 @@ async def scan_org(req: OrgScanRequest, background_tasks: BackgroundTasks):
     return {"org_job_id": org_job_id, "org_name": org_name, "repo_count": len(repos)}
 
 
-@app.get("/api/scans/org/{org_job_id}/status", response_model=OrgJobStatusResponse)
+@app.get(
+    "/api/scans/org/{org_job_id}/status",
+    response_model=OrgJobStatusResponse,
+    dependencies=[Depends(verify_api_key)],
+)
 async def get_org_status(org_job_id: str):
     db = await get_db()
     try:
