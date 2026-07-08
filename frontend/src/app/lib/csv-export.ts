@@ -1,5 +1,5 @@
 import type { Finding } from "../data/sample-data";
-
+import { saveBlob } from "./download";
 /**
  * Escapes a single CSV field per RFC 4180: wraps the value in double quotes
  * whenever it contains a comma, double quote, or newline, and doubles any
@@ -34,14 +34,5 @@ export function downloadFindingsAsCsv(findings: Finding[], filename = "findings.
   const csv = findingsToCsv(findings);
   // Prepend a UTF-8 BOM so Excel opens the file with correct encoding.
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = window.URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-
-  window.URL.revokeObjectURL(url);
+  saveBlob(blob, filename);
 }
