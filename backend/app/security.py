@@ -1,6 +1,5 @@
-import os
-
 import hmac
+import os
 
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -34,9 +33,9 @@ async def verify_api_key(
 
     if not hmac.compare_digest(credentials.credentials, api_key):
         raise HTTPException(
-             status_code=401,
-             detail="Invalid API key",
-             headers={"WWW-Authenticate": "Bearer"},
+            status_code=401,
+            detail="Invalid API key",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     return True
