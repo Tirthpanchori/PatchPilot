@@ -1,5 +1,7 @@
 import os
 
+import hmac
+
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -15,6 +17,8 @@ async def verify_api_key(
     If PATCHPILOT_API_KEY is not configured, authentication is disabled.
     This preserves compatibility for local development and automated tests.
     """
+    # Read the environment variable per-request to support hot rotation of the API key
+    # without requiring a server restart (harmless in practice as the OS caches reads).
     api_key = os.getenv("PATCHPILOT_API_KEY")
 
     # Authentication disabled if no API key is configured.
@@ -25,12 +29,14 @@ async def verify_api_key(
         raise HTTPException(
             status_code=401,
             detail="Missing Authorization header",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if credentials.credentials != api_key:
+    if not hmac.compare_digest(credentials.credentials, api_key):
         raise HTTPException(
-            status_code=403,
-            detail="Invalid API key",
+             status_code=401,
+             detail="Invalid API key",
+             headers={"WWW-Authenticate": "Bearer"},
         )
 
     return True
