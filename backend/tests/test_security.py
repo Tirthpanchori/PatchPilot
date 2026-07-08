@@ -1,8 +1,9 @@
 import asyncio
-import os
+
 import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
+
 from app.security import verify_api_key
 
 
