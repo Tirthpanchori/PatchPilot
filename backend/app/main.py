@@ -1014,8 +1014,10 @@ async def verify(
         "new_issues_introduced": new_issues_introduced,
         "baseline_job_id": baseline_job_id,
     }
-    (verify_dir / "verification-report.json").write_text(
-        json.dumps(verify_report, indent=2), encoding="utf-8"
+    await run_in_threadpool(
+        (verify_dir / "verification-report.json").write_text,
+        json.dumps(verify_report, indent=2),
+        encoding="utf-8",
     )
 
     try:
