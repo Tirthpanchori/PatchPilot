@@ -10,7 +10,7 @@ from app.main import app
 from app.models import VerifyResponse
 
 BLOCK_SECONDS = 2
-HEALTH_MAX_SECONDS = BLOCK_SECONDS * 0.75 
+HEALTH_MAX_SECONDS = BLOCK_SECONDS * 0.75
 
 
 def _slow_verify_repo(_repo_dir: Path) -> VerifyResponse:
