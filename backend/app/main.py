@@ -197,7 +197,8 @@ def _prioritize_findings(findings: List[Finding]) -> List[Finding]:
 def _extract_dependencies(repo_dir: Path) -> List[tuple[str, str]]:
     """
     Lightweight parser to extract dependencies from common manifests.
-    Currently supports package.json (Node) and requirements.txt (Python).
+    Currently supports package.json (Node), requirements.txt and
+    pyproject.toml (Python — Poetry and PEP 621).
     Returns a list of (package_name, version) tuples.
     """
     deps = []
@@ -231,6 +232,43 @@ def _extract_dependencies(repo_dir: Path) -> List[tuple[str, str]]:
                     deps.append((name, version))
         except Exception as e:
             logger.warning("Failed to parse requirements.txt in %s: %s", repo_dir, e)
+
+    pyproject_path = repo_dir / "pyproject.toml"
+    if pyproject_path.exists():
+        try:
+            try:
+                import tomllib
+            except ImportError:  # Python 3.10
+                import tomli as tomllib
+
+            with pyproject_path.open("rb") as f:
+                data = tomllib.load(f)
+
+            poetry_deps = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
+            for name, spec in poetry_deps.items():
+                if name == "python":
+                    continue
+                if isinstance(spec, str):
+                    version = spec
+                elif isinstance(spec, dict):
+                    version = str(spec.get("version", "unknown"))
+                else:
+                    version = "unknown"
+                deps.append((name, version))
+
+            for req in data.get("project", {}).get("dependencies", []):
+                # Drop environment markers ("pkg>=1.0; python_version<'3.11'")
+                # and allow extras ("pkg[extra]>=1.0").
+                req = str(req).split(";")[0].strip()
+                match = re.match(
+                    r"^([a-zA-Z0-9._\-]+)(?:\[[^\]]*\])?\s*(?:[=<>~!]+\s*(.*))?$", req
+                )
+                if match:
+                    name = match.group(1)
+                    version = (match.group(2) or "unknown").strip()
+                    deps.append((name, version))
+        except Exception as e:
+            logger.warning("Failed to parse pyproject.toml in %s: %s", repo_dir, e)
 
     return deps
 
