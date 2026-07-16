@@ -354,6 +354,31 @@ def test_extract_dependencies_pyproject_pep621(tmp_path):
     assert ("tomli", "2.0") in deps
 
 
+def test_extract_dependencies_pyproject_dual_section_dedup(tmp_path):
+    """Poetry + PEP 621 in one pyproject.toml must not duplicate packages."""
+    from app.main import _extract_dependencies
+
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        "[project]\n"
+        'name = "demo"\n'
+        'dependencies = ["requests>=2.28", "flask>=3.0"]\n'
+        "\n"
+        "[tool.poetry.dependencies]\n"
+        'python = "^3.10"\n'
+        'requests = "^2.28"\n',
+        encoding="utf-8",
+    )
+
+    deps = _extract_dependencies(tmp_path)
+
+    names = [name for name, _ in deps]
+    assert names.count("requests") == 1
+    # Poetry section is parsed first, so its version format wins.
+    assert ("requests", "^2.28") in deps
+    assert ("flask", "3.0") in deps
+
+
 def test_extract_dependencies_pyproject_malformed(tmp_path):
     """A broken pyproject.toml must not crash extraction of other manifests."""
     from app.main import _extract_dependencies

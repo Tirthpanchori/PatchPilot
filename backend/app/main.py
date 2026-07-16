@@ -77,6 +77,11 @@ from .scanners.semgrep import run_semgrep
 from .security import verify_api_key
 from .utils.fs import ensure_dir, safe_job_dir, safe_rmtree, unzip_to_dir
 
+try:
+    import tomllib
+except ImportError:  # Python 3.10
+    import tomli as tomllib  # type: ignore[no-redef]
+
 _MAX_UPLOAD_MB_RAW = os.environ.get("MAX_UPLOAD_MB")
 RANKER = load_ranker()
 
@@ -236,13 +241,12 @@ def _extract_dependencies(repo_dir: Path) -> List[tuple[str, str]]:
     pyproject_path = repo_dir / "pyproject.toml"
     if pyproject_path.exists():
         try:
-            try:
-                import tomllib
-            except ImportError:  # Python 3.10
-                import tomli as tomllib
-
             with pyproject_path.open("rb") as f:
                 data = tomllib.load(f)
+
+            # Projects using Poetry as a PEP 621 build backend can declare
+            # both sections; track names so each package is added only once.
+            pyproject_seen = set()
 
             poetry_deps = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
             for name, spec in poetry_deps.items():
@@ -254,6 +258,7 @@ def _extract_dependencies(repo_dir: Path) -> List[tuple[str, str]]:
                     version = str(spec.get("version", "unknown"))
                 else:
                     version = "unknown"
+                pyproject_seen.add(name.lower())
                 deps.append((name, version))
 
             for req in data.get("project", {}).get("dependencies", []):
@@ -265,6 +270,9 @@ def _extract_dependencies(repo_dir: Path) -> List[tuple[str, str]]:
                 )
                 if match:
                     name = match.group(1)
+                    if name.lower() in pyproject_seen:
+                        continue
+                    pyproject_seen.add(name.lower())
                     version = (match.group(2) or "unknown").strip()
                     deps.append((name, version))
         except Exception as e:
