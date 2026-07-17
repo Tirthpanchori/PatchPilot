@@ -70,44 +70,32 @@ function ChartContainer({
 }
 
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
-  const styleRef = React.useRef<HTMLStyleElement>(null);
-
   const colorConfig = React.useMemo(
-  () => Object.entries(config).filter(([, c]) => c.theme || c.color),
-  [config],
-);
+    () => Object.entries(config).filter(([, c]) => c.theme || c.color),
+    [config],
+  );
 
   const cssText = React.useMemo(() => {
     if (!colorConfig.length) return "";
     return Object.entries(THEMES)
-      .map(
-        ([theme, prefix]) => `
+      .map(([theme, prefix]) => `
 ${prefix} [data-chart=${id}] {
 ${colorConfig
-            .map(([key, itemConfig]) => {
-              const color =
-                itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
-                itemConfig.color;
-              return color ? `  --color-${key}: ${color};` : null;
-            })
-            .join("\n")}
+  .map(([key, itemConfig]) => {
+    const color =
+      itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
+      itemConfig.color;
+    return color ? `  --color-${key}: ${color};` : null;
+  })
+  .join("\n")}
 }
-`,
-      )
+`)
       .join("\n");
   }, [id, colorConfig]);
 
-  React.useEffect(() => {
-    if (styleRef.current) {
-      styleRef.current.textContent = cssText;
-    }
-  }, [cssText]);
+  if (!colorConfig.length) return null;
 
-  if (!colorConfig.length) {
-    return null;
-  }
-
-  return <style ref={styleRef} />;
+  return <style>{cssText}</style>;
 };
 
 const ChartTooltip = RechartsPrimitive.Tooltip;
