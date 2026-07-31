@@ -14,6 +14,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
+from contextlib import asynccontextmanager
 
 import aiosqlite
 import httpx
@@ -94,7 +95,13 @@ MAX_UPLOAD_MB = max(1, MAX_UPLOAD_MB)
 MAX_UPLOAD_SIZE = MAX_UPLOAD_MB * 1024 * 1024
 
 logger = logging.getLogger(__name__)
-app = FastAPI(title="PatchPilot API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    # Start background cleanup for finished ACTIVE_SCANS entries
+    asyncio.create_task(_cleanup_active_scans_loop())
+    yield
+app = FastAPI(title="PatchPilot API", version="0.1.0", lifespan=lifespan)
 
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
@@ -126,13 +133,6 @@ WORK_ROOT = Path(
     os.environ.get("PATCHPILOT_WORKDIR", Path(tempfile.gettempdir()) / "patchpilot")
 )
 ensure_dir(WORK_ROOT)
-
-
-@app.on_event("startup")
-async def startup():
-    await init_db()
-    # Start background cleanup for finished ACTIVE_SCANS entries
-    asyncio.create_task(_cleanup_active_scans_loop())
 
 
 @app.get("/health")
