@@ -95,12 +95,16 @@ MAX_UPLOAD_MB = max(1, MAX_UPLOAD_MB)
 MAX_UPLOAD_SIZE = MAX_UPLOAD_MB * 1024 * 1024
 
 logger = logging.getLogger(__name__)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     # Start background cleanup for finished ACTIVE_SCANS entries
     asyncio.create_task(_cleanup_active_scans_loop())
     yield
+
+
 app = FastAPI(title="PatchPilot API", version="0.1.0", lifespan=lifespan)
 
 ALLOWED_ORIGINS = [
